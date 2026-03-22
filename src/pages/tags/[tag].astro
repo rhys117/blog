@@ -1,0 +1,52 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getCollection } from "astro:content";
+
+export async function getStaticPaths() {
+  const posts = await getCollection("blog");
+  const allTags = new Set<string>();
+
+  posts.forEach((post) => {
+    post.data.tags.forEach((tag) => allTags.add(tag));
+  });
+
+  return [...allTags].map((tag) => ({
+    params: { tag },
+    props: {
+      tag,
+      posts: posts
+        .filter((post) => !post.data.draft && post.data.tags.includes(tag))
+        .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()),
+    },
+  }));
+}
+
+const { tag, posts } = Astro.props;
+
+function formatDate(date: Date) {
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+---
+<BaseLayout title={`Posts tagged "${tag}" — Rhys Murray`}>
+  <h1>Posts tagged <em>{tag}</em></h1>
+  <ul class="post-list" style="margin-top: 1.5rem;">
+    {posts.map((post) => (
+      <li class="post-item">
+        <time datetime={post.data.pubDate.toISOString()}>
+          {formatDate(post.data.pubDate)}
+        </time>
+        <h3>
+          <a href={`/blog/${post.id}`}>{post.data.title}</a>
+        </h3>
+        <p>{post.data.description}</p>
+      </li>
+    ))}
+  </ul>
+  <p style="margin-top: 2rem;">
+    <a href="/tags">&larr; All tags</a>
+  </p>
+</BaseLayout>

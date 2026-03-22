@@ -1,0 +1,21 @@
+{
+  "name": "personal-blog",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@astrojs/mdx": "^5.0.2",
+    "@astrojs/sitemap": "^3.7.1",
+    "astro": "^6.0.8",
+    "unist-util-visit": "^5.1.0"
+  }
+}

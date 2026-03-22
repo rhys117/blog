@@ -1,0 +1,27 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getCollection } from "astro:content";
+
+const posts = await getCollection("blog");
+const tagCounts = new Map<string, number>();
+
+posts
+  .filter((p) => !p.data.draft)
+  .forEach((post) => {
+    post.data.tags.forEach((tag) => {
+      tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+    });
+  });
+
+const sortedTags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]);
+---
+<BaseLayout title="Tags — Rhys Murray">
+  <h1>Tags</h1>
+  <ul class="tag-list" style="margin-top: 1.5rem;">
+    {sortedTags.map(([tag, count]) => (
+      <li>
+        <a href={`/tags/${tag}`} class="tag">{tag} ({count})</a>
+      </li>
+    ))}
+  </ul>
+</BaseLayout>
