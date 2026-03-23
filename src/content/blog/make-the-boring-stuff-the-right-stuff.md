@@ -5,15 +5,14 @@ pubDate: 2026-03-22
 tags: [rails, ruby, architecture, patterns]
 ---
 
+
 Rails gives you a structure to build on, but it doesn't enforce how you use it. Is a turbo frame update or an HTML redirect the right response? Either works. How do you scope the data? How do you filter it? There are a few completely valid answers to each. That's the problem. Once you have half the controllers doing one thing and the other half doing another, your product starts feeling inconsistent. There's no shared abstraction, no consistent structure to reach for. A new developer can't look at one controller and understand what to expect from the next.
 
-You feel the absence of a blueprint immediately. Every controller is solving a different domain problem, but they're all writing the same boring bits around the edges too. It's in those boring bits where inconsistency creeps in the easiest, new ways of doing the same thing take hold and the older parts of the codebase get left behind. The instinct is to write the guide, enforce the pattern in review, and hope it sticks. The problem with relying on discipline is that it doesn't scale. Abstractions are how you encode the right decisions and let the consistency happen by default, not by intervention.
-
-The examples here are from my own side project, a wedding RSVP platform. The domain is simple enough to follow without context, but the patterns come from experience in larger organisations[^1] and how I've seen consistency maintained across a sprawling amount of code.
+If you've worked with a blueprint that tackles the boring pieces for you before, the absence of one is felt immediately. It's in those boring bits where inconsistency creeps in the easiest. The instinct is to write a guide, enforce the pattern in review, and hope it holds. The problem with relying on discipline is that it doesn't scale. Abstractions are how you encode the right decisions and let the consistency happen by default, not by intervention.
 
 ## The shape of the thing
 
-Before drilling into the pieces, here's the full concern at the top level
+Before drilling into the pieces, here's the full concern at the top level[^1]
 
 ```ruby
 module CRUDResource
@@ -140,13 +139,9 @@ and the one hook that stamps the event on creation. Everything else is inherited
 
 ## Bridge the gap between data and design system
 
-With the data pipeline extracted, the next pain point is the view layer. Most index pages
-are a table. Most show pages are a panel with fields. The instinct is to share partials,
-but partials can compound into their own mess.
+With the data pipeline extracted, the next pain point is the view layer. Most index pages are a table. Most show pages are a panel with fields. The instinct is to share partials, but anyone who's maintained a mature Rails app knows where that leads.
 
-I've seen what partial hell actually looks like. Locals that aren't obvious at the call site, conditionals that grow to handle every slight variation between resources, implicit dependencies on instance variables that were set three layers up. A partial that started as a clean extraction becomes fragile in ways that are hard to trace. You fix a rendering issue for one resource and break three others. You add a new resource and spend twenty minutes working out which partial to copy and which conditionals to add.
-
-LLMs can generate partials fast, but each generation is slightly different. The variance compounds and you end up back where you started.
+LLMs make this worse, not better. They can generate partials fast, but each generation is slightly different. Without a shared structure to compose against, the variance compounds faster than it would by hand.
 
 The better solution is resource components that compose design system building blocks. I've used this approach with JSX in a previous role and the clarity it brings is real.
 ViewComponent (or Phlex) brings the same structure to Rails.
@@ -362,8 +357,7 @@ In part two, we'll go further, a DSL and adapter layer that turns the component
 configuration into pure declaration, and removes the last remaining boilerplate from the
 controller entirely.
 
-[^1]: I owe a debt to Paul Jones who thought deeply about resource abstraction, and to
-[ActiveAdmin's resource controller](https://github.com/activeadmin/activeadmin/blob/master/app/controllers/active_admin/resource_controller.rb#L7)
-which follows much of this approach.
+[^1]: The examples here are from a side project but the patterns come from experience in larger organisations. I owe a debt to Paul Jones who thought deeply about resource abstraction, and to
+[ActiveAdmin's resource controller](https://github.com/activeadmin/activeadmin/blob/master/app/controllers/active_admin/resource_controller.rb#L7) which follows much of this approach.
 
 [^2]: [Ransack, Getting Started](https://activerecord-hackery.github.io/ransack/getting-started/simple-mode/)
