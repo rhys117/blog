@@ -1,18 +1,17 @@
 ---
-title: "Make the Boring Stuff the Right Stuff"
+title: "Rails on Rails"
 description: "Encoding the right decisions into abstractions so consistency happens by default, not by intervention."
 pubDate: 2026-03-22
 tags: [rails, ruby, architecture, patterns]
 ---
 
+Rails gives you a structure to build on, but it doesn't enforce how you use it. Is a turbo frame update or an HTML redirect the right response? Either works. How do you scope the data? How do you filter it? There are a few completely valid answers to each. That's the problem. Once you have half the controllers doing one thing and the other half doing another, your product starts feeling inconsistent. Without shared abstractions there isn't a consistent structure to reach for. By looking at one example, you wouldn't know what to expect from the next.
 
-Rails gives you a structure to build on, but it doesn't enforce how you use it. Is a turbo frame update or an HTML redirect the right response? Either works. How do you scope the data? How do you filter it? There are a few completely valid answers to each. That's the problem. Once you have half the controllers doing one thing and the other half doing another, your product starts feeling inconsistent. There's no shared abstraction, no consistent structure to reach for. A new developer can't look at one controller and understand what to expect from the next.
-
-If you've worked with a blueprint that tackles the boring pieces for you before, the absence of one is felt immediately. It's in those boring bits where inconsistency creeps in the easiest. The instinct is to write a guide, enforce the pattern in review, and hope it holds. The problem with relying on discipline is that it doesn't scale. Abstractions are how you encode the right decisions and let the consistency happen by default, not by intervention.
+If you've worked with a blueprint that tackles the boring pieces for you before, the absence of one is immediately noticeable. It's in the boring bits where inconsistency creeps in the easiest. The instinct is to write a guide and enforce patterns in review whilst hoping that's enough. The problem with relying on discipline is that it doesn't scale. Abstractions are how you encode the right decisions and let the consistency happen by default, not by intervention.
 
 ## The shape of the thing
 
-Before drilling into the pieces, here's the full concern at the top level[^1]
+Before drilling into the pieces, here's the full concern at the top level[^1].
 
 ```ruby
 module CRUDResource
@@ -94,9 +93,7 @@ def before_create(resource)
 end
 ```
 
-That's it. No overriding `create`, no copying the full method body, no leaving the next
-developer wondering which controller's version to use as their reference. The hook is the
-documented extension point. Using it correctly is the path of least resistance.
+That's it. No overriding `create`, no copying the full method body, no leaving the next developer wondering which controller's version to use as their reference. This is the template method pattern[^3], the concern defines the algorithm, the hooks are the extension points. Using it correctly is the path of least resistance.
 
 Here's what a complete controller using the module looks like.
 
@@ -130,24 +127,26 @@ class GuestsController < ApplicationController
     resource.event = Current.event
     resource
   end
+  
+  def permitted_params
+    params.require(:event).permit(
+	  :first_name, :last_name, :email, :mobile, :allowed_plus_ones, #...
+    )
+  end
 end
 ```
 
-That's a full CRUD resource. Scoping, filtering, ordering, authorisation, and lifecycle
-hooks are all handled. The only code specific to guests is the configuration at the top
-and the one hook that stamps the event on creation. Everything else is inherited.
+That's a full CRUD resource. Scoping, filtering, ordering, authorisation, and lifecycle hooks are all handled. The only code specific to guests is the configuration at the top, the one hook that stamps the event on creation and the permitted params for the resource. Everything else is inherited.
 
 ## Bridge the gap between data and design system
 
-With the data pipeline extracted, the next pain point is the view layer. Most index pages are a table. Most show pages are a panel with fields. The instinct is to share partials, but anyone who's maintained a mature Rails app knows where that leads.
+With the data pipeline extracted, the next pain point is the view layer. Most index pages are a table and most show pages are a panel with fields. The instinct is to share partials, but anyone who's maintained a mature Rails app knows where that leads.
 
 LLMs make this worse, not better. They can generate partials fast, but each generation is slightly different. Without a shared structure to compose against, the variance compounds faster than it would by hand.
 
-The better solution is resource components that compose design system building blocks. I've used this approach with JSX in a previous role and the clarity it brings is real.
-ViewComponent (or Phlex) brings the same structure to Rails.
+The better solution is resource components that compose design system building blocks. I've used this approach with JSX in a previous role and the clarity it brings is real. ViewComponent (or Phlex) brings the same structure to Rails.
 
-A `GuestIndexComponent` composes a generic `IndexComponent`, wiring the guest specific
-columns into a shared table structure.
+A `GuestIndexComponent` composes a generic `IndexComponent`, wiring the guest specific columns into a shared table structure.
 
 ```erb
 <%= render(IndexComponent.new(
@@ -173,29 +172,19 @@ columns into a shared table structure.
 <% end %>
 ```
 
-The base `IndexComponent` doesn't know what a guest or a vendor is. It knows actions,
-columns, rows, and how to render cell content based on type (`:string`, `:currency`,
-`:boolean`). Those decisions are made once and every resource inherits them. Similar
-components handle show and form pages the same way.
+The base `IndexComponent` doesn't know what a guest or a vendor is. It knows actions, columns, rows, and how to render cell content based on type (`:string`, `:currency`,`:boolean`). Those decisions are made once and every resource inherits them. Similar components handle show and form pages the same way.
 
-The boundary is explicit and the dependency is declared at the call site. There's no hunting
-for which instance variable a partial expects, no conditional that quietly handles a
-resource this partial wasn't originally written for. The component is self-contained and
-the composition is obvious.
+The boundary is explicit and the dependency is declared at the call site. There's no hunting for which instance variable a partial expects, no conditional that quietly handles a resource this partial wasn't originally written for. The component is self-contained and the composition is obvious.
 
 More signal, less noise. Faster to code, faster to review, and clearer in intent.
 
 ## Unify how controllers respond
 
-The data flows through the concern and views are composed from shared components. What's
-left is how controllers respond after a save.
+The data flows through the concern and views are composed from shared components. What's left is how controllers respond after a save.
 
-Without a shared handler, this is where consistency quietly falls apart. A junior shows a
-flash message on validation failure instead of re-rendering the form with errors in place.
-Another controller redirects on success instead of replacing a turbo frame. None of these
-are wrong enough to catch in review. They're just different, and the differences compound.
+Without a shared handler, this is where consistency quietly falls apart. A junior shows a flash message on validation failure instead of re-rendering the form with errors in place. Another controller redirects on success instead of replacing a turbo frame. None of these are wrong enough to catch in review. They're just different, and the differences compound.
 
-A single response handler prevents all of it. `save_and_respond` wraps the save attempt. On success it delegates to a shared response handler. On failure it re-renders the form component with errors in place, `form_component` is resolved from `configure_views`, the same configuration that declares index and show components. The controller never makes that decision itself, which is the point. The right behaviour on failure is encoded once and inherited everywhere.
+Abstracting the response handling prevents the drift in styles. `save_and_respond` wraps the save attempt, when it's a success, it always responds in a consistent manner. On failure it re-renders the form component with errors in place, `form_component` is resolved from `configure_views`, the same configuration that declares index and show components. The controller never makes that decision itself, which is the point. The right behaviour for both success and failures is encoded once and inherited everywhere.
 
 ```ruby
 def save_and_respond(object, component:, path:, message: nil, replace_target: nil)
@@ -214,7 +203,7 @@ def save_and_respond(object, component:, path:, message: nil, replace_target: ni
 end
 ```
 
-The success path delegates to `render_for`, which handles format negotiation once for every controller.
+Both paths eventually call `render_for`, which handles format negotiation once for every controller.
 
 ```ruby
 def render_for(object, component:, path:, message: nil, replace_target: nil)
@@ -249,13 +238,11 @@ def update
 end
 ```
 
-The hook points are clear and the defaults are sensible. The `||=` lets a `before_action`
-or hook override the message earlier in the flow without touching the action itself.
+The hook points are clear and the defaults are sensible. `||=` lets a `before_action` or hook override the message earlier in the flow without touching the action itself, so that overriding these and calling `super` is always an option.
 
 ## When the pattern gets pressure-tested
 
-The guests controller fits the concern cleanly but not every resource will. The messages
-controller shows how you can use what works and override only what doesn't.
+The guests controller fits the concern cleanly but not every resource will. The messages controller shows how you can use what works and override only what doesn't.
 
 ```ruby
 class MessagesController < BaseController
@@ -298,66 +285,87 @@ class MessagesController < BaseController
 
   def after_create
     resource.send!
-    super
   end
 
   def message_flow
     @message_flow ||= MessageFlow.new(Current.event)
   end
+  
+  def resource_params  
+    params.require(:mass_communication).permit(  
+      :owner_id, :owner_type, :dynamic_group, :kind, :body, :subject, :template
+    )
+  end
 end
 ```
 
-This controller needs custom view components that take a `message_flow` the base concern
-knows nothing about. It overrides `build_resource` because messages are constructed through
-a step-based flow, not a simple `new`. `after_create` triggers a side effect of sending
-the message. The `resend` action is fully custom but still uses `render_for` from the
-response handler, it gets the same turbo stream, HTML, and JSON rendering for free without
-reimplementing any of it.
+This controller needs more complex components that take a `message_flow`. It overrides `build_resource` because messages are constructed through a step-based flow, not a simple `new` call. `after_create` triggers a side effect of sending the message. The `resend` action is fully custom but still uses `render_for` from the response handler, it gets the same turbo stream, HTML, and JSON rendering for free without reimplementing any of it.
 
-None of that required rewriting the pipeline. `configure_views` declares custom components
-at the call site. `build_resource` and `after_create` are the same hooks available to every
-controller, used here for heavier lifting. Custom actions like `resend` reach into the
-shared toolbox without reimplementing anything. The concern absorbs the complexity without
-the controller having to reimplement the parts that still apply: scoping, authorisation,
-response handling, error rendering.
+None of that required rewriting the pipeline. `build_resource` and `after_create` are the same hooks available to every controller, used here for heavier lifting. Custom actions like `resend` reach into the shared toolbox without reimplementing anything. The concern absorbs the complexity without the controller having to reimplement the parts that still apply: scoping, authorisation, response handling, error rendering.
 
-That's the test of a good abstraction. It shouldn't only work for the easy cases but make
-the hard cases manageable without asking you to opt out of everything to handle a few
-differences.
+That's the test of a good abstraction. It shouldn't only work for the easy cases but make the hard cases manageable without asking you to opt out of everything to handle a few differences.
 
 ## The costs
 
-The concern earns its keep when the work it absorbs outweighs what it adds in indirection.
-Indirection is a real cost. A developer debugging a scoping issue has to understand
-`DataAccess` before they can find where to look. A new team member has to learn the
-abstraction before they can contribute comfortably. Neither of those is free.
+The concern earns its keep when the work it absorbs outweighs what it adds in indirection. Indirection is a real cost. A developer debugging a scoping issue has to understand `DataAccess`  before they can find where to look. A new team member has to learn the abstraction before they can contribute comfortably. Neither of those is free.
 
-There's also a threshold worth naming. The MessagesController overrides two hooks and one
-method, the concern still does most of the work. If a controller is overriding five things
-and the shared behaviour is down to response handling, you're probably better served writing
-it plainly. Once you start fighting the abstraction, bail on it. You don't need to shoehorn everything into this one pattern.
+There's also a threshold worth naming. The MessagesController overrides two hooks and one method, the concern still does most of the work. If a controller is overriding five things and the shared behaviour is down to response handling, you're probably better served writing it plainly and only using the `ResponseHandler`. Once you start fighting the abstraction, bail on it, fall back to writing a controller from scratch and include what makes sense if anything at all. You don't need to shoehorn everything into this one pattern. It's a default, not an absolute.
 
-Build this when you have more than a handful of CRUD resources and a design system to
-compose against. Don't leave it to a massive refactor on a mature product.
+Build this when you have more than a handful of CRUD resources and a design system to compose against. Don't leave it to a massive refactor on a mature product.
+
+It's worth noting that some of the cost is mitigated by naming conventions that fit the Rails framework, the hooks should still feel natural to a Rails developer thanks to the conventions you get for free with Rails.
 
 ## A reasonable place to stop
 
-These three pieces work together. A controller concern handling data, resource components
-composing a design system, and a response handler unifying rendering.
+These three pieces work together. A controller concern handling data, resource components composing a design system, and a response handler unifying rendering.
 
-A new resource has a clear pattern. Create a controller, include the concern, build its
-components, wire them in. A change to how tables render benefits every resource at once.
-A new developer opens a controller and knows what to expect before they've read a line.
+A new resource has a clear pattern. Create a controller, include the concern, build its components, wire them in. A change to how tables render benefits every resource at once. A new developer opens a controller and knows what to expect before they've read a line.
 
-That last part is the thing that's hard to articulate until you've felt the alternative.
-When the blueprint is there and working, it feels familiar. You can get straight to the
-substance once you know the pattern. You're not fighting the noise. It's all signal.
+That last part is the thing that's hard to articulate until you've felt the alternative. When the blueprint is there and working, it feels familiar. You can get straight to the substance once you know the pattern. You're not fighting the noise. It's all signal.
 
-In part two, we'll go further, a DSL and adapter layer that turns the component
-configuration into pure declaration, and removes the last remaining boilerplate from the
-controller entirely.
+--- 
+
+## A next step
+
+In a follow up part two, the `configure_views` lambdas, permitted params, and component wiring collapse into a single declarative adapter class. It delivers the power of frameworks like ActiveAdmin without sacrificing the ability to customise. That's all for next time, but here's what a `GuestAdapter` looks like in practice:
+
+```ruby
+class GuestAdapter < ResourceAdapter
+  param_key :participant
+  permit :first_name, :last_name, :email, :mobile, :allowed_plus_ones
+
+  index do
+    title 'Guests'
+    icon :users
+    row_url { |guest| app_guest_path(guest.uuid) }
+
+    column :full_name, header: 'Name', sortable: true, type: :header
+    column :email, sortable: true
+  end
+
+  show do
+    title(&:full_name)
+
+    field :email, icon: :email
+    field :mobile, icon: :phone
+    field(:tags, render: :badges) { |guest| guest.groups.map(&:name) }
+  end
+
+  form do
+    inputs 'Personal Information' do
+      input :first_name
+      input :last_name
+      input :email
+      input :mobile
+    end
+  end
+end
+```
+
 
 [^1]: The examples here are from a side project but the patterns come from experience in larger organisations. I owe a debt to Paul Jones who thought deeply about resource abstraction, and to
 [ActiveAdmin's resource controller](https://github.com/activeadmin/activeadmin/blob/master/app/controllers/active_admin/resource_controller.rb#L7) which follows much of this approach.
 
 [^2]: [Ransack, Getting Started](https://activerecord-hackery.github.io/ransack/getting-started/simple-mode/)
+
+[^3]: [GoF Template Method](https://refactoring.guru/design-patterns/template-method)
