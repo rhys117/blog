@@ -323,6 +323,8 @@ These three pieces work together. A controller concern handling data, resource c
 
 A new resource has a clear pattern. Create a controller, include the concern, build its components, wire them in. A change to how tables render benefits every resource at once. A new developer opens a controller and knows what to expect before they've read a line.
 
+The discipline from here is resisting the urge to keep growing the base. Every edge case that gets folded into the concern makes it harder to understand for everyone else. The hooks exist so that individual controllers can handle their own complexity. If a new requirement doesn't clearly belong in the shared layer, it belongs in the controller. Be deliberate about what earns a place in the abstraction and let the hooks absorb the rest.
+
 That last part is the thing that's hard to articulate until you've felt the alternative. When the blueprint is there and working, it feels familiar. You can get straight to the substance once you know the pattern. You're not fighting the noise. It's all signal.
 
 --- 
