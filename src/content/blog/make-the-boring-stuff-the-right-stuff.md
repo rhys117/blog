@@ -138,6 +138,8 @@ end
 
 That's a full CRUD resource. Scoping, filtering, ordering, authorisation, and lifecycle hooks are all handled. The only code specific to guests is the configuration at the top, the one hook that stamps the event on creation and the permitted params for the resource. Everything else is inherited.
 
+It's worth noting that `configure_views` is only necessary because we're using ViewComponents. With standard partials, Rails' conventional view lookup would resolve `guests/index`, `guests/show`, and `guests/_form` automatically and this configuration wouldn't be needed at all.
+
 ## Bridge the gap between data and design system
 
 With the data pipeline extracted, the next pain point is the view layer. Most index pages are a table and most show pages are a panel with fields. The instinct is to share partials, but anyone who's maintained a mature Rails app knows where that leads.
