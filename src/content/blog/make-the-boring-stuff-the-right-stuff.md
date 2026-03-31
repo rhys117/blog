@@ -130,7 +130,7 @@ class GuestsController < ApplicationController
   
   def permitted_params
     params.require(:event).permit(
-	  :first_name, :last_name, :email, :mobile, :allowed_plus_ones, #...
+      :first_name, :last_name, :email, :mobile, :allowed_plus_ones, #...
     )
   end
 end
