@@ -5,7 +5,7 @@ pubDate: 2026-04-02
 tags: [ai, career, architecture]
 ---
 
-This isn't original, smarter people than me are already writing about this. So let me parrot their wisdom.
+Smarter people than me are already writing about this. So let me parrot the wisdom of Fowler, Beck and others.
 
 Software engineering isn't going anywhere. Code monkeys are another story though. Or I'm wrong and we'll be all out of a job in two years.
 
