@@ -9,6 +9,8 @@ Rails gives you a structure to build on, but it doesn't enforce how you use it. 
 
 If you've worked with a blueprint that tackles the boring pieces for you before, the absence of one is immediately noticeable. It's in the boring bits where inconsistency creeps in the easiest. The instinct is to write a guide and enforce patterns in review whilst hoping that's enough. The problem with relying on discipline is that it doesn't scale. Abstractions are how you encode the right decisions and let the consistency happen by default, not by intervention.
 
+Three layers carry most of that weight, how data flows in (scoping, filtering, ordering), how views compose against a design system, and how controllers respond after a save. Each is a place where small inconsistencies compound, and they're the examples we'll look at here.
+
 ## The shape of the thing
 
 Before drilling into the pieces, here's the full concern at the top level[^1].
@@ -68,9 +70,9 @@ module CRUDResource
       @resource ||= collection.find_by!(id_field => params[:id])
     end
 
-    def before_create(resource) = before_persist(resource)
-    def before_update(resource) = before_persist(resource)
-    def before_persist(resource) = resource
+    def before_create(resource) = before_save(resource)
+    def before_update(resource) = before_save(resource)
+    def before_save(resource) = resource
     def after_create; end
     def after_update; end
   end
@@ -82,8 +84,8 @@ that forgets authorisation. `apply_filtering` runs Ransack[^2]. `apply_ordering`
 the configured sort. These run in a defined order, once, and every controller including
 this concern gets them.
 
-The lifecycle hooks are where the concern earns its extensibility. `before_create`,
-`before_update`, and the shared `before_persist` give every controller clean extension
+The lifecycle hooks are what make the concern extensible. `before_create`,
+`before_update`, and the shared `before_save` give every controller clean extension
 points without overriding core methods. Need to set an attribute before creation?
 
 ```ruby
@@ -107,7 +109,8 @@ class GuestsController < ApplicationController
                      id_field: :uuid,
                      order_by: :name
 
-  # Used for index pages
+  # Named scopes become tab-like filters on the index page,
+  # driven by a query param and applied to the collection automatically.
   configure_scopes(
     confirmed: -> (collection) { collection.attending_event(Current.event) },
     declined: -> (collection) { collection.declined_event(Current.event) },
@@ -148,7 +151,7 @@ LLMs make this worse, not better. They can generate partials fast, but each gene
 
 The better solution is resource components that compose design system building blocks. I've used this approach with JSX in a previous role and the clarity it brings is real. ViewComponent (or Phlex) brings the same structure to Rails.
 
-A `GuestIndexComponent` composes a generic `IndexComponent`, wiring the guest specific columns into a shared table structure.
+Here's the template for `GuestIndexComponent`, a resource-specific ViewComponent whose job is to compose the generic `IndexComponent` with guest-specific columns.
 
 ```erb
 <%= render(IndexComponent.new(
@@ -208,7 +211,7 @@ end
 Both paths eventually call `render_for`, which handles format negotiation once for every controller.
 
 ```ruby
-def render_for(object, component:, path:, message: nil, replace_target: nil)
+def render_for(object, component:, message: nil, replace_target: nil)
   respond_to do |format|
     format.turbo_stream do
       streams = []
