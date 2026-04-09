@@ -32,15 +32,15 @@ I wrote this after a conversation about what resources might be appropriate for 
 
 ## Talks
 
-| Talk | Speaker | Notes |
-| --- | --- | --- |
-| [Solid OOP](https://www.youtube.com/watch?v=v-2yFMzxqwU&list=PLXXnezSEtvNMwlVo1fx3OZ-UUF_1G4oQi) | Sandi Metz | The config example in this talk alone is brilliant. |
-| [Polly wants a Message](https://www.youtube.com/watch?v=XXi_FBrZQiU) | Sandi Metz | |
-| [Magic Tricks of Testing](https://www.youtube.com/watch?v=URSWYvyc42M) | Sandi Metz | |
-| [Railway Oriented Programming](https://www.youtube.com/watch?v=94ELQLqWjxM&t=424s) | Ryan Biggs | |
-| [Hammock Driven Development](https://www.youtube.com/watch?v=f84n5oFoZBc) | Rich Hickey | |
-| [Nothing is Something](https://www.youtube.com/watch?v=OMPfEXIlTVE) | Sandi Metz | Null objects. |
-| [All the Little Things](https://www.youtube.com/watch?v=8bZh5LMaSmE) | Sandi Metz | Probably her most famous talk — a good start if you haven't seen her before. |
+| Talk | Speaker | Notes                                                                       |
+| --- | --- |-----------------------------------------------------------------------------|
+| [Solid OOP](https://www.youtube.com/watch?v=v-2yFMzxqwU&list=PLXXnezSEtvNMwlVo1fx3OZ-UUF_1G4oQi) | Sandi Metz | The config example in this talk alone is brilliant.                         |
+| [Polly wants a Message](https://www.youtube.com/watch?v=XXi_FBrZQiU) | Sandi Metz |                                                                             |
+| [Magic Tricks of Testing](https://www.youtube.com/watch?v=URSWYvyc42M) | Sandi Metz |                                                                             |
+| [Railway Oriented Programming](https://www.youtube.com/watch?v=94ELQLqWjxM&t=424s) | Ryan Biggs |                                                                             |
+| [Hammock Driven Development](https://www.youtube.com/watch?v=f84n5oFoZBc) | Rich Hickey |                                                                             |
+| [Nothing is Something](https://www.youtube.com/watch?v=OMPfEXIlTVE) | Sandi Metz | Null objects.                                                               |
+| [All the Little Things](https://www.youtube.com/watch?v=8bZh5LMaSmE) | Sandi Metz | Probably her most famous talk. A good start if you haven't seen her before. |
 
 ## Team Readings
 
