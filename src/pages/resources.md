@@ -82,7 +82,7 @@ Pick one. Learn abstract resource management.
 
 **Sorbet (runtime library only)**
 
-Has some impressive meta programming tactics. Annotation programming isn't common in Ruby, so it's interesting to see an implementation.
+Has some impressive meta programming tactics. Decorators/annotation like this programming isn't common in Ruby, so it's interesting to see an implementation.
 
 **Dry Rb**
 
