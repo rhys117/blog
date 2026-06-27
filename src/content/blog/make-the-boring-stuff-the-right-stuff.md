@@ -19,19 +19,24 @@ Before drilling into the pieces, here's the full concern at the top level[^1].
 module CRUDResource
   extend ActiveSupport::Concern
 
-  include Configuration
+  include ConfigureResource
+  include ConfigureViews
+  include Embedded
   include DataAccess
+  include LifecycleHooks
   include Authorization
-  include Actions
   include Routes
+  include SaveAndRender
   include CRUD
+  include BatchActions
+  include EnabledActions
   include ::ResponseHandling
 end
 ```
 
-Think of this as a map, or contents, rather than a definition. This article covers `DataAccess` and
-`ResponseHandling`, the data pipeline and the response layer. The configuration DSL and
-action generation that sit between them are for part two.
+Think of this as a map, or contents, rather than a definition. This article covers the data
+pipeline (`DataAccess` and `LifecycleHooks`) and the response layer (`SaveAndRender` and
+`ResponseHandling`). The configuration DSL and action generation are for part two.
 
 `ResponseHandling` sits outside the `CRUDResource` namespace deliberately. It's useful
 enough on its own that controllers outside this pattern reach for it too.
@@ -60,7 +65,7 @@ module CRUDResource
     end
 
     def paginated_collection
-      ordered = apply_ordering(apply_filtering(scoped_collection))
+      ordered = apply_ordering(filtered_collection)
       return ordered if resource_config.paginated == false
 
       ordered.page(params[:page]).per(per_page)
@@ -80,13 +85,30 @@ end
 ```
 
 `policy_scope` ensures Pundit scoping is always applied. There's no version of this concern
-that forgets authorisation. `apply_filtering` runs Ransack[^2]. `apply_ordering` respects
+that forgets authorisation. `filtered_collection` runs Ransack[^2]. `apply_ordering` respects
 the configured sort. These run in a defined order, once, and every controller including
 this concern gets them.
 
-The lifecycle hooks are what make the concern extensible. `before_create`,
-`before_update`, and the shared `before_save` give every controller clean extension
-points without overriding core methods. Need to set an attribute before creation?
+The lifecycle hooks are what make the concern extensible. They live in a sibling
+`LifecycleHooks` module, where `before_create` and `before_update` both delegate to a
+shared `before_persist`. Every controller gets clean extension points without overriding
+core methods.
+
+```ruby
+module CRUDResource
+  module LifecycleHooks
+    private
+
+    def before_create(resource) = before_persist(resource)
+    def before_update(resource) = before_persist(resource)
+    def before_persist(resource) = resource
+    def after_create; end
+    def after_update; end
+  end
+end
+```
+
+Need to set an attribute before creation?
 
 ```ruby
 def before_create(resource)
@@ -130,9 +152,9 @@ class GuestsController < ApplicationController
     resource.event = Current.event
     resource
   end
-  
-  def permitted_params
-    params.require(:event).permit(
+
+  def resource_params
+    params.require(:participant).permit(
       :first_name, :last_name, :email, :mobile, :allowed_plus_ones, #...
     )
   end
@@ -189,20 +211,25 @@ The data flows through the concern and views are composed from shared components
 
 Without a shared handler, this is where consistency quietly falls apart. A junior shows a flash message on validation failure instead of re-rendering the form with errors in place. Another controller redirects on success instead of replacing a turbo frame. None of these are wrong enough to catch in review. They're just different, and the differences compound.
 
-Abstracting the response handling prevents the drift in styles. `save_and_respond` wraps the save attempt, when it's a success, it always responds in a consistent manner. On failure it re-renders the form component with errors in place, `form_component` is resolved from `configure_views`, the same configuration that declares index and show components. The controller never makes that decision itself, which is the point. The right behaviour for both success and failures is encoded once and inherited everywhere.
+Abstracting the response handling prevents the drift in styles. `save_and_render` wraps the save attempt, when it's a success, it always responds in a consistent manner. On failure it re-renders the failure component with errors in place. That component is the `form_component`, resolved from `configure_views`, the same configuration that declares index and show components. The controller never makes that decision itself, which is the point. The right behaviour for both success and failures is encoded once and inherited everywhere.
 
 ```ruby
-def save_and_respond(object, component:, path:, message: nil, replace_target: nil)
-  if object.save
-    yield if block_given?
-    handle_successful_save(
-      object, component: component, path: path,
-      replace_target: replace_target, message: message
+def save_and_render(success_component:, failure_component:, success_path: nil, &after_save)
+  if @resource.save
+    after_save&.call
+    render_persisted(
+      @resource,
+      component: success_component,
+      path: success_path || resource_path,
+      fallback_path: success_path || collection_path,
+      message: @success_message
     )
   else
-    handle_failed_save(
-      object, error_component: form_component,
-      replace_target: replace_target
+    render_errors(
+      @resource,
+      message: @resource.errors.full_messages.join(', '),
+      replace_component: failure_component,
+      replace_target: @replace_target
     )
   end
 end
