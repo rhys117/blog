@@ -58,20 +58,25 @@ I built mine independently and arrived at the same shape, which I take as a good
 I found regex too limiting depending on the task. One of its biggest limitations is not verifying what's already in a file. 
 Plenty of mistakes are only visible when you union the incoming edit with the current code.
 
-The migration backfill case is the clearest example. Adding a `NOT NULL` column to an existing table is fine. 
-Backfilling that column in the same migration is fine. Doing both in one migration on a populated table will lock writes while it runs. 
-No single line is wrong, the combination is. A snippet like the one below makes it easy to catch.
+The clearest case for me is a controller that grows a CRUD action without the concern that's meant to back it. In my apps a controller with `create`, `update` or `destroy` should `include CRUDResource`, which carries the scoping, authorisation and response lifecycle I wrote about in [Rails on Rails](/blog/rails-on-rails). 
+Add one of those actions by hand and skip the include, and you've quietly forked off the convention.
 
 ```ruby
 module Detectors
-  module MigrationBackfill
-    def self.call(file_path:, new_content:, **)
-      source = (File.exist?(file_path) ? File.read(file_path) : "") + "\n" + new_content
-      column = not_null_backfill_column(source)
-      return false unless column
+  module CrudResourceMissing
+    CRUD_ACTION = /^\s*def\s+(create|update|destroy)\b/
+    INCLUDES_CRUD = /include\s+CRUDResource\b/
 
-      { context: "This migration adds NOT NULL on `#{column}` and backfills it in the " \
-                 "same file. On a populated table that locks writes. Split the backfill out." }
+    def self.call(file_path:, new_content:, **)
+      existing = File.exist?(file_path) ? File.read(file_path) : ""
+      content = "#{existing}\n#{new_content}"
+
+      return false unless CRUD_ACTION.match?(content)
+      return false if INCLUDES_CRUD.match?(content)
+
+      { context: "This controller has a CRUD action but doesn't `include CRUDResource`, " \
+                 "the concern that carries scoping, authorisation and the response lifecycle. " \
+                 "Add it, or opt out on purpose if this one really is a special case." }
     end
   end
 end
