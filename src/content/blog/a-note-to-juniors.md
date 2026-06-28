@@ -27,7 +27,7 @@ Use AI to accelerate your learning. Use it with intent. If you fail to do so you
 
 The good news - a lot of vibe coded projects are great ideas, and these fast prototypes could be an opportunity for many of us in the industry in the future. They'll need to scale, they'll need real architecture, and they'll need people who know how to maintain the velocity. The genie ***and you*** are still the answer to that. There will always be jobs for the problem solvers in the industry, in fact they might just be more in demand than ever, will they still be called programmers? Probably. The role is changing, not being eliminated.
 
-We've also been here before. 4GL, a concept that was going to take our jobs was the talk of the 80s. This was before my time so it's only hearsay to me, but we're still here [^4]. The businesses that win will be the ones that continue to invest in experts who know how to use the tools. Redundancies and layoffs will happen to the code monkeys, but that money will just as quickly be spent on the people with the knowledge of how to leverage augmented coding. They'll have to, or they'll be outpaced by their competitors.
+The businesses that win will be the ones that continue to invest in experts who know how to use the tools. Redundancies and layoffs will happen to the code monkeys, but that money will just as quickly be spent on the people with the knowledge of how to leverage augmented coding. They'll have to, or they'll be outpaced by their competitors.
 
 Master augmented coding and you'll outpace the seniors in the industry who refuse to. You have the advantage of being molded by these tools. You're not catching up. You're already there.
 
@@ -36,8 +36,6 @@ Master augmented coding and you'll outpace the seniors in the industry who refus
 [^2]: [Design Stamina Hypothesis](https://martinfowler.com/bliki/DesignStaminaHypothesis.html)
 
 [^3]: [The future of AI is Ruby on Rails](https://www.seangoedecke.com/ai-and-ruby/)
-
-[^4]: [4GL](https://en.wikipedia.org/wiki/Fourth-generation_programming_language)
 
 [^5]: [Cognitive debt](https://margaretstorey.com/blog/2026/02/09/cognitive-debt/)
 
