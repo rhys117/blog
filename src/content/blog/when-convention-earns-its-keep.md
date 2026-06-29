@@ -1,14 +1,20 @@
 ---
-title: "When Convention Earns Its Keep"
+title: "The Shape of the Thing: When Convention Earns Its Keep"
 description: "A DSL and adapter layer that lives inside your Rails app, not alongside it."
-draft: true
-pubDate: 2026-03-22
+draft: false
+pubDate: 2026-05-27
 tags: [rails, ruby, architecture, patterns]
 ---
 
-The three concerns from the [previous piece](/blog/make-the-boring-stuff-the-right-stuff) hold for a long time. The data pipeline, the component layer, the response handler. A new resource is a controller, a concern, a handful of components. Consistent, clear, reviewable.
+The three concerns from the [previous piece](/blog/rails-on-rails) hold for a long time. The data pipeline, the component layer, the response handler. 
 
-What pushed me further was something specific. I was reviewing a PR that added a new resource — a `VendorIndexComponent`, a `VendorShowComponent`, a `VendorFormComponent`. Each one composed the same generic building blocks with different columns, different fields, different labels. I looked at it next to the guest components from the week before and they were almost identical.
+A new resource is a controller, a concern, a handful of components. Consistent, clear and should still feels railsey for vanilla rails devs.
+
+The next piece here, less so, it goes a way in molding some of my personal gripes with the view layer and ensuring that as a project grows
+it remains nimble and can cover a large surface with a small amount of code.
+
+Because when you're writing out your tenth set of components for a resource (`VendorIndexComponent`, `VendorShowComponent`, `VendorFormComponent`). 
+Each one is largely similar to the one you just wrote, composed the same generic building blocks with different columns, different fields, different labels.
 
 ```ruby
 # app/components/vendor/index_component.rb
@@ -34,15 +40,28 @@ class Guest::IndexComponent < ViewComponent::Base
 end
 ```
 
-Same structure. Different columns, different row links, different empty state text. That's it. Multiply this across index, show, and form for every resource and you're maintaining a lot of files that are really just configuration wearing a component's clothes.
+Multiply this across index, show, and form for every resource and you're maintaining a lot of files that are really just configuration wearing a component's clothes.
 
 The question became whether the generic components could configure themselves. Instead of building a `VendorIndexComponent` that tells `IndexComponent` which columns to render, declare the columns once and let the generic component read them directly.
 
 ## Not ActiveAdmin
 
-If you've done Rails long enough, you've seen this before. ActiveAdmin solves the same problem with a DSL that declares resources, columns, filters, and forms. It works well until it doesn't, and when it doesn't, it fails badly.
+If you've worked with Rails long enough, you've likely seen this before. The popular gem ActiveAdmin solves the same problem with a DSL that declares resources, columns, filters, and forms. 
+It works well until it doesn't, and when it doesn't, often when you want to customise it more deeply. 
 
-The core issue is that ActiveAdmin gives you an application. It has its own controllers, its own views, its own layout, its own CSS, its own asset pipeline. You're building inside ActiveAdmin's world, and the moment you need something it didn't anticipate, you're fighting its rendering pipeline to break out. Custom pages require learning ActiveAdmin's page DSL. Custom actions mean hooking into its controller lifecycle. Custom styling means overriding its theme. The escape hatch is climbing through a window.
+The core issue is that ActiveAdmin gives you an application. It has its own controllers, its own views, its own layout, its own CSS, its own asset pipeline. 
+It doesn't take the standard way and build on top, it feels like it ejects entirely.
+
+You're building inside ActiveAdmin's world, and the moment you need something it didn't anticipate, you're fighting its rendering pipeline to break out. Custom pages require learning ActiveAdmin's page DSL. Custom actions mean hooking into its controller lifecycle. Custom styling means overriding its theme. 
+The escape hatches are unfortunately not as intuitive as one might hope. Which is shame, because before I go on ragging on it (like a lot of the community likes to do now) I want to say, for what it does, it does it incredibly well. 
+You just have to know upfront that it's not all that friendly when you try to work outside its usual parameters. 
+
+Other admin frameworks such as Avo and Administrate have come along to fill in many of the gaps it presented as well. Whilst I liked a lot of what they had to offer, 
+I feel like they all just stopped short of being quite as beautiful as the declarative layer ActiveAdmin does so well. 
+
+So in plain old experimentation I set out to see if I could build that layer on top of existing rails controllers and if it was worth the effort.
+
+The conclusion I came to was a resounding yes. Hopefully it's not because I'm the devil who wrote it, looking at it through rose colour glasses but 
 
 I took something specific from ActiveAdmin: the idea that a resource's UI can be declared rather than assembled. `column :name, sortable: true` is a good sentence in any DSL. What I didn't want was the rest. The parallel universe. The separate admin app that happens to live in the same repository.
 
@@ -115,7 +134,7 @@ class VendorsController < App::BaseController
 end
 ```
 
-Four lines and a hook. The model is discovered by convention — `VendorsController` resolves to `Vendor`, the adapter is inferred from that. The generic `IndexComponent` reads the adapter's column definitions. The generic `ShowComponent` reads the field definitions. The generic `FormComponent` reads the input definitions. No resource-specific component files at all.
+Four lines and a hook. The model is discovered by convention. `VendorsController` resolves to `Vendor`, and the adapter is inferred from that. The generic `IndexComponent` reads the adapter's column definitions. The generic `ShowComponent` reads the field definitions. The generic `FormComponent` reads the input definitions. No resource-specific component files at all.
 
 The three concerns from article one are still doing the work. The adapter just removed the wiring between them. Data still flows through `DataAccess`. Responses still go through `render_for`. The components are the same design system building blocks. The adapter is the configuration layer that replaced the per-resource component files.
 
@@ -154,7 +173,7 @@ This matters for pace. A new resource can be scaffolded and working in minutes. 
 
 This pattern could work in any MVC framework. What makes it particularly effective in Rails is Turbo Frames.
 
-A vendor's show page has fields, payments, and notes. Payments and notes are their own resources with their own CRUD lifecycle. The traditional options aren't great — a monolithic controller that manages all three, or scattered controllers stitched together with redirect logic. Neither scales well and both make the code harder to follow.
+A vendor's show page has fields, payments, and notes. Payments and notes are their own resources with their own CRUD lifecycle. The traditional options aren't great. Either a monolithic controller that manages all three, or scattered controllers stitched together with redirect logic. Neither scales well and both make the code harder to follow.
 
 Turbo Frames let us decompose the page cleanly. The vendor adapter declares where embedded resources appear.
 
@@ -201,7 +220,7 @@ This only works because the pattern lives inside the application. ActiveAdmin ca
 
 ## The gradient
 
-Most abstractions work on the happy path but force you to eject entirely when you need something non-standard. The goal here is the opposite — use as much or as little as the problem demands.
+Most abstractions work on the happy path but force you to eject entirely when you need something non-standard. The goal here is the opposite. Use as much or as little as the problem demands.
 
 At full convention, a resource is one adapter file and a four-line controller. The `VendorsController` above. No components, no templates, no view wiring.
 
@@ -258,7 +277,7 @@ When the mechanics are shared, the testing strategy inverts. Instead of testing 
 
 The generic `IndexComponent` gets a thorough spec: does it render columns, handle sorting, apply filters, show empty states? The response handler gets its own spec: does it negotiate formats correctly, replace turbo frames, push flash messages? The adapter's DSL gets a spec: does `column :name, sortable: true` produce the right `Column` object with the right attributes?
 
-Once those layers are covered, a simple adapter like `VendorAdapter` has very little that's interesting to test. The columns it declares are just configuration. The interesting decisions — how columns render, how sorting works, how turbo frames compose — are already covered.
+Once those layers are covered, a simple adapter like `VendorAdapter` has very little that's interesting to test. The columns it declares are just configuration. The interesting decisions (how columns render, how sorting works, how turbo frames compose) are already covered.
 
 A meta-spec that programmatically discovers and validates every adapter in the system closes the last gap. It iterates the adapters, checks that every declared field corresponds to a real model attribute or has a block, verifies that `frame_id` is set on embedded resources, and confirms that the adapter's `permit` list matches the form inputs. Convention enforcement isn't just a habit. Add an adapter with a missing `frame_id` and the build fails.
 
