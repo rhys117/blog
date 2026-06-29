@@ -10,19 +10,13 @@ tags: [ai, claude-code, context-engineering, hooks]
 
 There comes a time when the CLAUDE.md file has grown too much, and because of the amount of context in it, often not all of it is used.
 
-Claude starts exploring, the context window grows with files being read, and decisions provided in CLAUDE.md start being missed. Especially in longer sessions. 
-Rules that are still important somehow start being ignored.
+Claude starts exploring, the context window grows with files being read, and decisions provided in CLAUDE.md start being missed.
+We all know this as context rot, and there are many great articles about it.
+Model recall degrades as the window fills, so the more you front-load, the more likely it is that the model will wander as the session grows.
 
-I found this particularly the case when you have legacy parts of the code, when the rule conflicts with old code, or there's a new way of doing 
-something in the codebase.
-
-We all know this as context rot, and there are many great articles about it. 
-Model recall degrades as the window fills, so the more you front-load, the more likely it is that the model will wander. 
+I found this particularly the case when you have legacy parts of the code and the files read might conflict with the instructions provided earlier.
 
 > CLAUDE.md is, in Anthropic's own words, ["naively dropped into context up front."](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
-
-In a way this feels familiar, it's the age old problem of a developer lacking the tribal knowledge and missing documentation or style guides. 
-And a mistake either gets caught in review or the tech debt might grow.
 
 ## Deliver the rule at the point of action
 
@@ -47,19 +41,23 @@ service_object:
   context: "Before adding a service object, ask whether it coordinates work across more than one model. If it just wraps save or update on a single record, that logic belongs on the model."
 ```
 
-Neither of these is a lint. RuboCop will happily pass a boolean column or a one-line service object. What the rule carries is a judgment about what the code should be, and it only surfaces the instant Claude reaches for the thing. 
-It's the way I can start encoding some of my taste and code preferences in a way that the LLM is more likely to pay attention to.
+Neither of these is a lint. RuboCop will happily pass a boolean column or a one-line service object. What the rule carries is a 
+judgment about what the code should be, and it only surfaces the instant Claude reaches for the relevant files. 
+This is the way I encode my taste and code preferences so that the LLM is more likely to pay attention to the rules I like.
 
-This is the declarative half. It is also exactly what Anthropic later shipped as a first-party plugin called Hookify. Rules that fire on Edit, Write, and MultiEdit, match file path and content by regex, and choose between block and warn. 
-I built mine independently and arrived at the same shape, which I take as a good sign rather than a bad one. The interesting work is the three places I went past it.
+In fact it's important to name what these aren't, rules that could otherwise be easily captured in lint rules. Those should
+be their own steering layer that the LLM has to pass and know to correct (whilst creating a barrier for 
+handwritten code at the same time).
 
 ## Logic, not just a pattern
 
 I found regex too limiting depending on the task. One of its biggest limitations is not verifying what's already in a file. 
 Plenty of mistakes are only visible when you union the incoming edit with the current code.
 
-The clearest case for me is a controller that grows a CRUD action without the concern that's meant to back it. In my apps a controller with `create`, `update` or `destroy` should `include CRUDResource`, which carries the scoping, authorisation and response lifecycle I wrote about in [Rails on Rails](/blog/rails-on-rails). 
-Add one of those actions by hand and skip the include, and you've quietly forked off the convention.
+The clearest case for me is a controller that grows a CRUD action without the concern that's meant to back it. 
+In my apps a controller with `create`, `update` or `destroy` should `include CRUDResource`, which carries the scoping, 
+authorisation and response lifecycle I wrote about in [Rails on Rails](/blog/rails-on-rails). 
+Add one of those actions by hand and skip the include, and you might have quietly forked off the convention.
 
 ```ruby
 module Detectors
@@ -82,7 +80,7 @@ module Detectors
 end
 ```
 
-The detector reacts only when it needs to, because it can read the current state of the code and weigh the edit on top of it.
+The `CrudResourceMissing` detector reacts only when it needs to, because it can read the current state of the code and weigh the edit on top of it.
 
 ## Block, nudge, and the escape hatch
 
@@ -103,14 +101,16 @@ Using block_once, the context is injected before the edit alongside a further li
 It means the LLM can decide if it's relevant, and either adjust or re-run the edit unchanged.
 
 I've also set this to only fire once per session. It blocks the first time, then stays out of the way so it doesn't become noise or too invasive. 
-It works through sentinel files that reset each session, so "once" means once per working session.
+It works through sentinel files that reset each session, and each working session gets their own set of sentinel files.
 
 ## Point it upstream, at reads
 
 Guarding writes is the obvious move. The other interesting target is reads, because that's where the context rot actually starts.
 
-When Claude greps for a symbol across the whole repo it can pull in hundreds of matched lines into the context, and depending on the task, most of them are going to be irrelevant. 
-Thinking about how to be targeted helps keep the model focused. By adding a nudge on Bash, Grep and Glob, we can suggest better pathways based on our type of application.
+When Claude greps for a symbol across the whole repo it can pull in hundreds of matched lines into the context, 
+and depending on the task, most of them are going to be irrelevant. 
+Thinking about how to be targeted helps keep the model focused. By adding a nudge on Bash, Grep and Glob, 
+we can suggest better pathways based on our type of application.
 
 ```yaml
 # read.yml, fires on Bash, Grep, and Glob
@@ -139,11 +139,14 @@ Event -> Activity [direct]
 
 It means only a handful of edges and the context for `Event` are passed back to the LLM, 
 rather than the hundreds of lines a `grep -r Event app/` could add to the context rot. 
-To achieve this I add a line to the advisory context pointing the agent at a `/domain-map` skill, which queries the map first, and the LLM usually does much more targeted reading afterward.
+To achieve this I add a line to the advisory context pointing the agent at a `/domain-map` skill, 
+which queries the map first, and the LLM usually does much more targeted reading afterward.
 
-Best yet, because it's deterministic, it's easy to regenerate the dot and JSON files, which the LLM is usually smart enough to do itself if it deems they're out of date.
+Best yet, because it's deterministic, it's easy to regenerate the dot and JSON files, which the LLM is usually smart 
+enough to do itself if it deems they're out of date.
 
-The map reaches past what the usual gems capture, too. A lot of the behaviour lives in POROs and concerns namespaced under a model, and the same query fans out to the siblings sitting under a root model.
+The map reaches past what the usual gems capture, too. A lot of the behaviour lives in POROs and concerns namespaced 
+under a model, and the same query fans out to the siblings sitting under a root model.
 
 ```
 $ bin/domain-query wrappers Participant
@@ -159,8 +162,8 @@ Participant::SelfSignup
 
 So before the agent reaches for the root `Participant` model and starts piling on methods, the map has already shown it where the existing behaviour lives.
 
-It's the same idea as the write side, only pointed the other way. The combination means instead of cleaning up a bad edit after the fact, I've kept the junk out of the context window and course corrected
-before the edit's even written.
+It's the same idea as the write side, only pointed the other way. The combination means instead of cleaning up a bad 
+edit after the fact, I've kept the junk out of the context window and course corrected before the edit's even written.
 
 Note that if you're looking at the plugin this rule is outside of what I've included, but I do intend to provide it as its own shortly. 
 In the meantime it should give you an idea of how these skills and hooks can be built on top of each other.
@@ -179,10 +182,12 @@ The full playbook, every pattern and gotcha, never enters the main context.
 
 Whilst I built this in isolation since hooks came out and have been tweaking it, it's important to note that this idea came out of talks conveying the same message of course correcting the LLM using the harness.
 
-Anthropic calls it just-in-time context, and they have their own work on skills that they call progressive disclosure. Late last year, they shipped the declarative layer (the regex) of the above as Hookify.
+Anthropic calls it just-in-time context, and they have their own work on skills that they call progressive disclosure. 
+Late last year, they shipped the declarative layer (the regex) of the above as Hookify.
 
 Which is great. It shows the idea has merit, the big players are already shipping native ways to do it. 
-This plugin takes it a little further and adds my own flavour. And if I were a betting man, as their plugins and skills continue to grow, I'd be surprised if more complex patterns like the detectors weren't added to their resources. 
+This plugin takes it a little further and adds my own flavour. And if I were a betting man, as their plugins and skills continue to grow, 
+I'd be surprised if more complex patterns like the detectors weren't added to their resources. 
 
 Detectors that read the project state, union it with the incoming edit, and name a real finding back. 
 The per-session escape hatches, so a block can teach without turning into a wall. 
