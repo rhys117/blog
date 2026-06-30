@@ -23,8 +23,9 @@ I found this particularly the case when you have legacy parts of the code and th
 The answer is shrinking the CLAUDE.md file and moving from front-loading to providing the context just in time when the model tries to read or write
 to specific files or folders.
 
-Using the Claude Code hooks, you can easily wire scripts for PreToolUse which can fire before writes (Edit, Write, and MultiEdit), and reads (Read|Bash|Grep|Glob). 
-The hook sees the file path and the content about to be read or written. Scripting then chooses to block the write or let it through. 
+Using the Claude Code hooks, you can easily wire scripts for PreToolUse which can fire before writes (Edit, Write, and MultiEdit), and reads (Read. Bash, Grep, Glob). 
+The hook sees the file path and the content about to be read or written, and scripting then chooses to block the read/write 
+injecting further context beforehand or let it through. 
 I drive mine from small `read.yml` and `write.yml` files, one entry per rule.
 
 ```yaml
