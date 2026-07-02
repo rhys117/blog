@@ -8,7 +8,7 @@ tags: [ai, claude-code, context-engineering, hooks]
 > Whilst this article is written in the context of a Claude Code harness within a Rails application, 
 > the same strategies could easily be adapted for other harnesses and frameworks that utilise AGENTS.md.
 
-Eventually the CLAUDE.md file grows too big, and with that much context, not all of it gets used.
+Eventually the CLAUDE.md file grows too big, and with that much context, not all of it gets used in each conversation.
 
 Claude starts exploring, the context window fills with files, and the decisions in CLAUDE.md start getting missed.
 We all know this as context rot, and there are many great articles about it.
@@ -107,7 +107,7 @@ It means the LLM can decide if it's relevant, and either adjust or re-run the ed
 I've also set this to only fire once per session. It blocks the first time, then stays out of the way so it doesn't become noise. 
 It works through sentinel files, and each working session gets its own set.
 
-## Point it upstream, at reads
+## Pointing it at reads
 
 Guarding writes is the obvious move. The other interesting target is reads, because that's where the context rot actually starts.
 
@@ -174,7 +174,7 @@ So before the agent reaches for the root `Participant` model and starts piling o
 It's the same idea as the write side, only pointed the other way. The combination means instead of cleaning up a bad 
 edit after the fact, I've kept the junk out of the context window and course corrected before the edit's even written.
 
-Note that if you're looking at the plugin, this rule sits outside what I've included, but I do intend to ship it on its own shortly. 
+Note that if you're looking at the plugin, this rule sits outside what I've included. 
 In the meantime it should give you an idea of how these skills and hooks can be built on top of each other.
 
 ## Hand off to a skill
@@ -185,13 +185,14 @@ It defers the detail to the moment it's relevant, rather than dumping it all in 
 The write side has the same trick, and unlike the domain map there's one included that lets you see the pattern. 
 In the Sorbet setup I use, a rule fires when I add a Ruby method without an inline type signature. 
 Instead of pulling the conventions into my session to fix it, it tells the agent to hand the job to a subagent that reads the `/rulekit:sorbet-inline-rbs` skill and signs the methods, runs `srb tc` until it's green, and reports back a line. 
-The full playbook, every pattern and gotcha, never enters the main context.
+The patterns and gotchas, never enters the main context.
 
 ## This is a pattern, not an invention
 
-Whilst I built this in isolation when hooks came out and have been tweaking it since, the idea isn't mine. It came out of talks pushing the same message, course correcting the LLM through the harness.
+Whilst I built this in isolation when hooks came out and have been tweaking it, the idea came out of talks pushing the same message, 
+course correcting the LLM through the harness.
 
-Anthropic calls it just-in-time context, and they have their own work on skills that they call progressive disclosure. 
+Anthropic calls it 'just in time' context, and they have their own work on skills that they call progressive disclosure. 
 Late last year, they shipped the declarative layer (the regex) of the above as Hookify.
 
 Which is great. It shows the idea has merit when the big players are already shipping native ways to do it. 
