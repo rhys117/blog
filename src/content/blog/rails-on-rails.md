@@ -21,14 +21,11 @@ module CRUDResource
 
   include Configuration
   include Renders
-  include Embedded::Defaults
   include DataAccess
   include LifecycleHooks
   include Authorization
   include Routes
   include SaveAndRender
-  include Breadcrumbs
-  include Titles
   include ::ResponseHandling
 end
 ```
@@ -69,21 +66,9 @@ module CRUDResource
       end
     end
 
-    def scoped_collection
-      return collection unless current_scope_key && scopes[current_scope_key]
-
-      instance_exec(collection, &scopes[current_scope_key])
-    end
-
-    def filtered_collection
-      return ransack_search.result if params[:q].blank?
-      # ...
-    end
-
     def paginated_collection
-      ordered = apply_ordering(filtered_collection)
+      ordered = apply_ordering(apply_filtering(scoped_collection))
 
-      return ordered if request.format.csv?
       return ordered if resource_config.paginated == false
 
       ordered.page(params[:page]).per(per_page)
@@ -98,7 +83,7 @@ end
 
 `policy_scope` ensures Pundit scoping is always applied. There's no version of this concern
 that forgets authorisation. `scoped_collection` applies the named scope from the query param.
-`filtered_collection` runs Ransack[^2]. `apply_ordering` respects the configured sort. These
+`apply_filtering` runs Ransack[^2]. `apply_ordering` respects the configured sort. These
 run in a defined order, once, and every controller including this concern gets them.
 
 The lifecycle hooks are what make the concern extensible, and they get their own module so
@@ -124,7 +109,7 @@ extension points without overriding core methods. Need to set an attribute befor
 
 ```ruby
 def before_create(resource)
-  resource.event = event
+  resource.event = Current.event
   resource
 end
 ```
@@ -134,20 +119,18 @@ That's it. No overriding `create`, no copying the full method body, no leaving t
 Here's what a complete controller using the module looks like.
 
 ```ruby
-class GuestsController < BaseController
+class GuestsController < ApplicationController
   include CRUDResource
 
   include CRUDResource::Actions::All # [index, show, new, create, edit, update, destroy]
 
-  crud_resource Participant, id_field: :uuid, order_by: :name_ordered
-
-  base_scope { |collection| collection.includes(:communications) }
+  crud_resource Participant, id_field: :uuid, order_by: :name
 
   # Named scopes become tab-like filters on the index page,
   # driven by a query param and applied to the collection automatically.
-  scope :confirmed, -> (collection) { collection.attending_event(event) }
-  scope :awaiting, -> (collection) { collection.pending_event(event) }
-  scope :declined, -> (collection) { collection.declined_event(event) }
+  scope :confirmed, -> (collection) { collection.attending_event(Current.event) }
+  scope :awaiting, -> (collection) { collection.pending_event(Current.event) }
+  scope :declined, -> (collection) { collection.declined_event(Current.event) }
 
   # These could also easily be inferred by naming conventions
   renders(
@@ -159,7 +142,7 @@ class GuestsController < BaseController
   private
 
   def before_create(resource)
-    resource.event = event
+    resource.event = Current.event
     resource
   end
 
@@ -196,7 +179,7 @@ Here's the template for `Guest::IndexComponent`, a resource-specific ViewCompone
   <% table.with_header(label: "RSVP Status") %>
 
   <% guests.each do |guest| %>
-    <% table.add_row(url: app_guest_path(guest.uuid)) do |row| %>
+    <% table.add_row(url: app_guest_path(guest)) do |row| %>
       <% row.add_cell { |cell| cell.with_content(guest.full_name) } %>
       <% row.add_cell { |cell| cell.with_content(guest.email) } %>
       <% row.add_cell(type: :status) { |cell| cell.with_content(guest.rsvp_status) } %>
@@ -205,7 +188,7 @@ Here's the template for `Guest::IndexComponent`, a resource-specific ViewCompone
 <% end %>
 ```
 
-The table component doesn't know what a guest or a vendor is. It knows actions, headers, rows, and how to render a cell based on its type and alignment. Those decisions are made once and every resource inherits them. Similar components handle show and form pages the same way.
+The table component doesn't know what a guest or a vendor is. It knows actions, headers, rows, and how to render cell content based on its type (`:string`, `:status`, `:currency`). Those decisions are made once and every resource inherits them. Similar components handle show and form pages the same way.
 
 The boundary is explicit and the dependency is declared at the call site. There's no hunting for which instance variable a partial expects, no conditional that quietly handles a resource this partial wasn't originally written for. The component is self-contained and the composition is obvious.
 
@@ -220,22 +203,17 @@ Without a shared handler, this is where consistency quietly falls apart. A junio
 Abstracting the response handling prevents the drift in styles. `save_and_render` wraps the save attempt, when it's a success, it always responds in a consistent manner. On failure it re-renders the form component with errors in place, `form_component` is resolved from `renders`, the same configuration that declares index and show components. The controller never makes that decision itself, which is the point. The right behaviour for both success and failures is encoded once and inherited everywhere.
 
 ```ruby
-def save_and_render(success_component:, failure_component:, success_path: nil, &after_save)
-  if @resource.save
-    after_save&.call
-    render_persisted(
-      @resource,
-      component: success_component,
-      path: success_path || resource_path,
-      fallback_path: success_path || collection_path,
-      message: @success_message
+def save_and_render(resource, component:, message: nil, replace_target: nil)
+  if resource.save
+    yield if block_given?
+    render_for(
+      resource, component: component,
+      message: message, replace_target: replace_target
     )
   else
     render_errors(
-      @resource,
-      message: @resource.errors.full_messages.join(', '),
-      replace_component: failure_component,
-      replace_target: @failure_target || @replace_target
+      resource, component: form_component,
+      replace_target: replace_target
     )
   end
 end
@@ -244,18 +222,16 @@ end
 The success path calls `render_for`, which handles format negotiation once for every controller.
 
 ```ruby
-def render_for(object, component:, path:, message: nil, replace_target: nil, html_redirects: false)
+def render_for(object, component:, message: nil, replace_target: nil)
   respond_to do |format|
     format.turbo_stream do
-      result = []
-      result << turbo_stream.replace(replace_target, resolved_component(component, object)) if replace_target
-      result << turbo_stream.append('flash-messages', UI.flash_notification(...)) if message
-      result << turbo_stream.append('history-container', UI.push_history(url: path))
-      render turbo_stream: result
+      streams = []
+      streams << turbo_stream.replace(replace_target, component) if replace_target
+      streams << flash_stream(message) if message
+      render turbo_stream: streams
     end
-    format.html { html_redirects ? redirect_to(path) : render(resolved_component(component, object)) }
-    format.json { render json: serialize_for_json(object) }
-    format.csv { stream_csv(object) }
+    format.html { render component }
+    format.json { render json: object }
   end
 end
 ```
@@ -267,18 +243,16 @@ def create
   @resource = before_create(build_resource)
   @success_message ||= "#{resource_class.model_name.human} has been added."
 
-  persist_resource { after_create }
+  save_and_render(@resource, component: show_component, ...) { after_create }
 end
 
 def update
   @resource = before_update(update_resource)
   @success_message ||= "#{resource_class.model_name.human} has been updated."
 
-  persist_resource { after_update }
+  save_and_render(@resource, component: show_component, ...) { after_update }
 end
 ```
-
-`persist_resource` is the thin layer between the two. It works out what to replace and what to render, a modal form clears itself and replaces the table it was launched from, everything else replaces the frame the form occupied, then hands off to `save_and_render`.
 
 The hook points are clear and the defaults are sensible. `||=` lets a `before_action` or hook override the message earlier in the flow without touching the action itself, so that overriding these and calling `super` is always an option.
 
@@ -287,12 +261,12 @@ The hook points are clear and the defaults are sensible. `||=` lets a `before_ac
 The guests controller fits the concern cleanly but not every resource will. The messages controller shows how you can use what works and override only what doesn't.
 
 ```ruby
-class MessagesController < BaseController
+class MessagesController < ApplicationController
   include CRUDResource
 
   include CRUDResource::Actions::All
 
-  crud_resource MassCommunication, order: {created_at: :desc}
+  crud_resource MassCommunication
   renders(
     index: -> {
       Message::IndexComponent.new(
@@ -310,55 +284,40 @@ class MessagesController < BaseController
     }
   )
 
+  def resend
+    resource.send!
+    render_for(
+      resource, component: show_component,
+      message: "Message resent to #{resource.recipient_count} guests"
+    )
+  end
+
   private
 
   def build_resource
-    @resource ||= if action_name.in?(%w[new preview])
-      step = message_flow.resolve_step(params[:step])
-      message_flow.build_mass_communication_for_step(step)
-    else
-      collection.new(resource_params).tap { |r| r.owner = event }
-    end
+    step = message_flow.resolve_step(params[:step])
+    message_flow.build_mass_communication_for_step(step)
   end
 
   def after_create
-    MassCommunication::Send.do(resource)
+    resource.send!
   end
 
   def message_flow
-    @message_flow ||= MessageFlow.new(event)
+    @message_flow ||= MessageFlow.new(Current.event)
   end
 
   def resource_params
-    params.permit(
-      mass_communication: [
-        :owner_id, :owner_type, :dynamic_group, :kind, :body, :subject, :template
-      ]
-    )[:mass_communication]
+    params.require(:mass_communication).permit(
+      :owner_id, :owner_type, :dynamic_group, :kind, :body, :subject, :template
+    )
   end
 end
 ```
 
-This controller needs more complex components that take a `message_flow`. It overrides `build_resource` because a new message is constructed through a step-based flow, not a simple `new` call. `after_create` triggers a side effect of sending the message.
+This controller needs more complex components that take a `message_flow`. It overrides `build_resource` because a new message is constructed through a step-based flow, not a simple `new` call. `after_create` triggers a side effect of sending the message. The `resend` action isn't part of the RESTful set at all, but it still uses `render_for` from the response handler, so it gets the same turbo stream, HTML, and JSON rendering for free without reimplementing any of it.
 
-None of that required rewriting the pipeline. `build_resource` and `after_create` are the same hooks available to every controller, used here for heavier lifting. The concern absorbs the complexity without the controller having to reimplement the parts that still apply: scoping, authorisation, response handling, error rendering.
-
-Custom actions reach into the same toolbox. The guest communications controller has a `resend` that isn't part of the RESTful set at all, and it still gets turbo stream, HTML, JSON and CSV rendering for free.
-
-```ruby
-def resend
-  duplicate = resource.build_duplicate
-  duplicate.save_and_send!
-
-  render_for(
-    duplicate,
-    component: show_component,
-    path: resource_path,
-    replace_target: 'guest_communications',
-    message: 'Communication sent.'
-  )
-end
-```
+None of that required rewriting the pipeline. `build_resource` and `after_create` are the same hooks available to every controller, used here for heavier lifting. Custom actions like `resend` reach into the shared toolbox without reimplementing anything. The concern absorbs the complexity without the controller having to reimplement the parts that still apply: scoping, authorisation, response handling, error rendering.
 
 That's the test of a good abstraction. It shouldn't only work for the easy cases but make the hard cases manageable without asking you to opt out of everything to handle a few differences.
 
